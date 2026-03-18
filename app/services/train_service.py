@@ -134,22 +134,35 @@ def get_train_status(
         ) from e
 
     parsed = parse_train_status_html(html_text)
-    events = [TrainEvent(**e) for e in parsed.get("events", [])]
 
-    window_start, window_end = _compute_event_window(
-        start_time_raw=start_time,
-        end_time_raw=end_time,
-    )
+    from app.schemas.train_schema import TrainInstance
+    instances = []
+    for inst in parsed.get("instances", []):
+        inst_events = [TrainEvent(**e) for e in inst.get("events", [])]
+        instances.append(TrainInstance(
+            start_date=inst.get("start_date"),
+            status=inst.get("status", "unknown"),
+            is_today=inst.get("is_today", False),
+            last_update=inst.get("last_update"),
+            events=inst_events,
+        ))
 
-    events = [
-        e
-        for e in events
-        if e.datetime is not None and window_start <= e.datetime < window_end
-    ]
+    primary_events = [TrainEvent(**e) for e in parsed.get("events", [])]
+    if start_time is not None or end_time is not None:
+        window_start, window_end = _compute_event_window(
+            start_time_raw=start_time,
+            end_time_raw=end_time,
+        )
+        primary_events = [
+            e for e in primary_events
+            if e.datetime is not None and window_start <= e.datetime < window_end
+        ]
 
     return TrainStatusResponse(
         train_number=train_number,
         start_date=parsed.get("start_date"),
+        status=parsed.get("status", "unknown"),
         last_update=parsed.get("last_update"),
-        events=events,
+        events=primary_events,
+        instances=instances,
     )
